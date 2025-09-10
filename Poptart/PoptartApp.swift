@@ -23,5 +23,6 @@ struct PoptartApp: App {
         }
         .windowResizability(.contentSize)
         .windowStyle(.hiddenTitleBar)
+        .windowToolbarStyle(.unified(showsTitle: false))
     }
 }

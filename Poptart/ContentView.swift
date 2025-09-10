@@ -8,11 +8,31 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+struct VisualEffectView: NSViewRepresentable {
+    let material: NSVisualEffectView.Material
+    let blendingMode: NSVisualEffectView.BlendingMode
+    
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = material
+        view.blendingMode = blendingMode
+        view.state = .active
+        return view
+    }
+    
+    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
+        nsView.material = material
+        nsView.blendingMode = blendingMode
+    }
+}
+
 struct ContentView: View {
     @State private var originalImage: NSImage?
     @State private var processedImage: NSImage?
     @State private var isProcessing = false
     @State private var addRoundedRect = true
+    @State private var borderWidth: CGFloat = 0
+    @State private var borderColor: NSColor = .black
     @State private var outputFormat: OutputFormat = .appiconset
     @State private var generatedIconsURL: URL?
     @State private var processingProgress: Double = 0
@@ -105,6 +125,48 @@ struct ContentView: View {
                         }
                     }
                     
+                    if addRoundedRect && outputFormat != .web {
+                        VStack(spacing: 8) {
+                            HStack {
+                                Text("Border width:")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.secondary)
+                                Slider(value: $borderWidth, in: 0...20)
+                                    .controlSize(.small)
+                                    .onChange(of: borderWidth) { _ in
+                                        if originalImage != nil && borderWidth > 0 {
+                                            processImage()
+                                        }
+                                    }
+                                Text("\(Int(borderWidth))")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.secondary)
+                                    .frame(width: 20)
+                            }
+                            
+                            if borderWidth > 0 {
+                                HStack {
+                                    Text("Border colour:")
+                                        .font(.system(size: 11))
+                                        .foregroundColor(.secondary)
+                                    ColorPicker("", selection: Binding(
+                                        get: { Color(borderColor) },
+                                        set: { borderColor = NSColor($0) }
+                                    ))
+                                    .labelsHidden()
+                                    .controlSize(.small)
+                                    .onChange(of: borderColor) { _ in
+                                        if originalImage != nil {
+                                            processImage()
+                                        }
+                                    }
+                                    Spacer()
+                                }
+                            }
+                        }
+                        .padding(.leading, 20)
+                    }
+                    
                     if processedImage != nil {
                         Button("Reset") {
                             withAnimation(.easeOut(duration: 0.2)) {
@@ -123,8 +185,12 @@ struct ContentView: View {
                 .transition(.opacity)
             }
         }
-        .frame(width: hasContent ? 296 : 172, height: hasContent ? 360 : 172)
-        .background(Color(NSColor.windowBackgroundColor))
+        .frame(width: hasContent ? 296 : 172, height: hasContent ? (addRoundedRect && borderWidth > 0 ? 420 : 380) : 172)
+        .background(
+            VisualEffectView(material: .sidebar, blendingMode: .behindWindow)
+                .ignoresSafeArea()
+                .opacity(0.8)
+        )
         .animation(.spring(response: 0.5, dampingFraction: 0.8), value: hasContent)
         .onChange(of: originalImage) { newImage in
             if newImage != nil {
@@ -226,15 +292,15 @@ struct ContentView: View {
                 // Generate based on selected format
                 switch outputFormat {
                 case .icns:
-                    try await processor.generateICNS(from: image, to: tempDir, addRoundedRect: addRoundedRect)
+                    try await processor.generateICNS(from: image, to: tempDir, addRoundedRect: addRoundedRect, borderWidth: borderWidth, borderColor: borderColor)
                 case .appiconset:
-                    try await processor.generateAppIconSet(from: image, to: tempDir, addRoundedRect: addRoundedRect)
+                    try await processor.generateAppIconSet(from: image, to: tempDir, addRoundedRect: addRoundedRect, borderWidth: borderWidth, borderColor: borderColor)
                 case .web:
                     try await processor.generateFavicons(from: image, to: tempDir)
                 }
                 
                 // For display, create the processed preview
-                let displayImage = (addRoundedRect && outputFormat != .web) ? processor.createProcessedPreview(from: image) : image
+                let displayImage = (addRoundedRect && outputFormat != .web) ? processor.createProcessedPreview(from: image, borderWidth: borderWidth, borderColor: borderColor) : image
                 
                 await MainActor.run {
                     withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {

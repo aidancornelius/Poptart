@@ -37,11 +37,11 @@ class ImageProcessor {
         (size: 180, filename: "apple-touch-icon.png")
     ]
     
-    func generateModernPNGs(from image: NSImage, to outputURL: URL, addRoundedRect: Bool = false) async throws {
+    func generateModernPNGs(from image: NSImage, to outputURL: URL, addRoundedRect: Bool = false, borderWidth: CGFloat = 0, borderColor: NSColor = .black) async throws {
         let folderURL = outputURL.appendingPathComponent("AppIcon")
         try FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
         
-        let processedImage = addRoundedRect ? applyRoundedRectBackground(to: image) : image
+        let processedImage = addRoundedRect ? applyRoundedRectBackground(to: image, borderWidth: borderWidth, borderColor: borderColor) : image
         
         for iconSize in macOSIconSizes {
             let resized = resizeImage(processedImage, to: CGSize(width: iconSize.pixelSize, height: iconSize.pixelSize))
@@ -50,11 +50,11 @@ class ImageProcessor {
         }
     }
     
-    func generateAppIconSet(from image: NSImage, to outputURL: URL, addRoundedRect: Bool = false) async throws {
+    func generateAppIconSet(from image: NSImage, to outputURL: URL, addRoundedRect: Bool = false, borderWidth: CGFloat = 0, borderColor: NSColor = .black) async throws {
         let iconsetURL = outputURL.appendingPathComponent("AppIcon.appiconset")
         try FileManager.default.createDirectory(at: iconsetURL, withIntermediateDirectories: true)
         
-        let processedImage = addRoundedRect ? applyRoundedRectBackground(to: image) : image
+        let processedImage = addRoundedRect ? applyRoundedRectBackground(to: image, borderWidth: borderWidth, borderColor: borderColor) : image
         var contents = ContentsJson()
         
         for iconSize in macOSIconSizes {
@@ -91,12 +91,12 @@ class ImageProcessor {
         try generateICO(from: image, to: faviconFolder.appendingPathComponent("favicon.ico"))
     }
     
-    func createProcessedPreview(from image: NSImage) -> NSImage {
-        return applyRoundedRectBackground(to: image)
+    func createProcessedPreview(from image: NSImage, borderWidth: CGFloat = 0, borderColor: NSColor = .black) -> NSImage {
+        return applyRoundedRectBackground(to: image, borderWidth: borderWidth, borderColor: borderColor)
     }
     
-    func generateICNS(from image: NSImage, to outputURL: URL, addRoundedRect: Bool = false) async throws {
-        let processedImage = addRoundedRect ? applyRoundedRectBackground(to: image) : image
+    func generateICNS(from image: NSImage, to outputURL: URL, addRoundedRect: Bool = false, borderWidth: CGFloat = 0, borderColor: NSColor = .black) async throws {
+        let processedImage = addRoundedRect ? applyRoundedRectBackground(to: image, borderWidth: borderWidth, borderColor: borderColor) : image
         
         // Create iconset first
         let iconsetURL = outputURL.appendingPathComponent("AppIcon.iconset")
@@ -132,7 +132,7 @@ class ImageProcessor {
         try? FileManager.default.removeItem(at: iconsetURL)
     }
     
-    private func applyRoundedRectBackground(to image: NSImage) -> NSImage {
+    private func applyRoundedRectBackground(to image: NSImage, borderWidth: CGFloat = 0, borderColor: NSColor = .black) -> NSImage {
         let size = CGSize(width: 1024, height: 1024)
         let newImage = NSImage(size: size)
         
@@ -159,6 +159,27 @@ class ImageProcessor {
                   from: NSRect(origin: .zero, size: image.size),
                   operation: .copy,
                   fraction: 1.0)
+        
+        // Draw border if specified
+        if borderWidth > 0 {
+            NSGraphicsContext.current?.saveGraphicsState()
+            
+            // Reset clipping to draw border on top
+            NSBezierPath(rect: NSRect(origin: .zero, size: size)).setClip()
+            
+            // Scale border width relative to icon size (1024px base)
+            let scaledBorderWidth = borderWidth * (iconSize / 100)
+            
+            // Create border path
+            let borderPath = NSBezierPath(roundedRect: NSRect(origin: insetOrigin, size: insetSize),
+                                         xRadius: cornerRadius,
+                                         yRadius: cornerRadius)
+            borderPath.lineWidth = scaledBorderWidth
+            borderColor.setStroke()
+            borderPath.stroke()
+            
+            NSGraphicsContext.current?.restoreGraphicsState()
+        }
         
         newImage.unlockFocus()
         return newImage
